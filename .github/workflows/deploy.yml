@@ -73,7 +73,7 @@ jobs:
 
 
   # ==========================================
-  # 3. SECURITY SCAN
+  # 3. TRIVY SECURITY SCAN
   # ==========================================
   security:
     name: Trivy Security Scan
@@ -95,7 +95,7 @@ jobs:
           docker load -i ./docker-artifact/image.tar
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ai-assisted-devops-platform:${{ github.sha }}
           format: table
@@ -111,8 +111,6 @@ jobs:
     name: Push Image to GHCR
     needs: security
 
-    # Push only when code is pushed to main.
-    # Don't push images for pull requests.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     runs-on: ubuntu-latest
