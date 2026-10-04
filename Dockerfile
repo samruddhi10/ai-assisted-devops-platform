@@ -11,8 +11,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /build
 
 # Install dependencies as a separate layer so app-code changes do not rebuild wheels.
-COPY app/requirement.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirement.txt \
+COPY app/requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt \
     && find /install -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 FROM python:3.12-slim-bookworm
@@ -47,5 +47,5 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3)"
 
-# Flask's built-in server is for development only. Gunicorn is in requirement.txt.
+# Flask's built-in server is for development only. Gunicorn is in requirements.txt.
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "2", "--timeout", "30", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
