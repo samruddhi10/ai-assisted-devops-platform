@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+
   pull_request:
     branches:
       - main
@@ -13,6 +14,10 @@ permissions:
   packages: write
 
 jobs:
+
+  # ==========================================
+  # 1. RUN TESTS
+  # ==========================================
   test:
     name: Run Tests
     runs-on: ubuntu-latest
@@ -32,8 +37,13 @@ jobs:
           pip install -r app/requirements.txt
 
       - name: Run pytest
-        run: python -m pytest
+        run: |
+          python -m pytest -v
 
+
+  # ==========================================
+  # 2. BUILD DOCKER IMAGE
+  # ==========================================
   docker:
     name: Build Docker Image
     needs: test
@@ -49,6 +59,22 @@ jobs:
             -t ai-assisted-devops-platform:${{ github.sha }} \
             .
 
+      - name: Save Docker image
+        run: |
+          docker save \
+            ai-assisted-devops-platform:${{ github.sha }} \
+            -o image.tar
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar
+
+
+  # ==========================================
+  # 3. SECURITY SCAN
+  # ==========================================
   security:
     name: Trivy Security Scan
     needs: docker
@@ -58,11 +84,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: ./docker-artifact
+
+      - name: Load Docker image
         run: |
-          docker build \
-            -t ai-assisted-devops-platform:${{ github.sha }} \
-            .
+          docker load -i ./docker-artifact/image.tar
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -72,3 +102,49 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
           severity: CRITICAL,HIGH
+
+
+  # ==========================================
+  # 4. PUSH IMAGE TO GHCR
+  # ==========================================
+  push:
+    name: Push Image to GHCR
+    needs: security
+
+    # Push only when code is pushed to main.
+    # Don't push images for pull requests.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: ./docker-artifact
+
+      - name: Load Docker image
+        run: |
+          docker load -i ./docker-artifact/image.tar
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag Docker image
+        run: |
+          docker tag \
+            ai-assisted-devops-platform:${{ github.sha }} \
+            ghcr.io/${{ github.repository_owner }}/ai-assisted-devops-platform:${{ github.sha }}
+
+      - name: Push Docker image
+        run: |
+          docker push \
+            ghcr.io/${{ github.repository_owner }}/ai-assisted-devops-platform:${{ github.sha }}
